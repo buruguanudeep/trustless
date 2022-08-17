@@ -12,7 +12,7 @@ contract Trustless is ChainlinkClient, ConfirmedOwner {
         address seller;
         uint256 amt;
         uint256 lock_time;
-        bool dispute;
+
         bool settled;
     }
     uint256 grace_period=24*60*60;
@@ -50,9 +50,11 @@ function withdrawLink() public onlyOwner {
 
 function requestVolumeData() public returns (bytes32 requestId) {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
+//'https://cac-api.cashfree.com/cac/v1/searchUTR/02344858392' \
 
+//H 'Authorization: Bearer XXXX'
         // Set the URL to perform the GET request on
-        req.add('get', 'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=ETH&tsyms=USD');
+        req.add('get', 'https://cac-api.cashfree.com/cac/v1/searchUTR/02344858392');
 
         // Set the path to find the desired data in the API response, where the response format is:
         // {"RAW":
@@ -107,21 +109,7 @@ function requestVolumeData() public returns (bytes32 requestId) {
         erc20.safeTransfer(database[token].seller,database[token].amt);
         database[token].settled=true;
     }
-    //call dispute incase seller disagrees to release tokens 
-    function call_dispute(uint256 token,string calldata reason)public{
-        require(!database[token].settled,"txn has been settled!");
-        require(msg.sender==database[token].buyer,"only buyer can dispute");
-        database[token].dispute=true;
-        emit dispute(token,owner,reason);
-    }
-    // call only if buyer wants to revert tokens back to seller
-    function call_dispute_settled(uint256 token,string calldata reason)public{
-        require(!database[token].settled && database[token].dispute,"either txn has been settled or not disputed");
-        require(msg.sender==database[token].buyer,"only buyer can call dispute settled");
-        erc20.safeTransfer(database[token].seller,database[token].amt);
-        database[token].settled=true;
-        emit dispute(token,owner,reason);
-    }
+
 
 
 }
