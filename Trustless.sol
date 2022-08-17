@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: unlicensed
+pragma solidity ^0.8.7;
+import '@chainlink/contracts/src/v0.8/ChainlinkClient.sol';
+import '@chainlink/contracts/src/v0.8/ConfirmedOwner.sol';
 
-contract Trustless{
+
+
+contract Trustless is ChainlinkClient, ConfirmedOwner {
+    using Chainlink for Chainlink.Request;
     struct Txn{
         address buyer;
         address seller;
@@ -13,7 +20,13 @@ contract Trustless{
     constructor(address token,address ow){
         owner=ow;
         erc20=IERC20(token);
+setChainlinkToken(0x326C977E6efc84E512bB9C30f76E30c160eD06FB);
+        setChainlinkOracle(0xCC79157eb46F5624204f47AB42b3906cAA40eaB7);
+
     }
+bytes32 private jobId;
+    uint256 private fee;
+
 
     IERC20 erc20;
     using SafeERC20 for IERC20;
@@ -22,6 +35,44 @@ contract Trustless{
     address owner;
     event eventTxn(address indexed buyer,address indexed seller,uint256 token);
     event dispute(uint256 indexed token,address indexed owner,string reason);
+jobId = 'ca98366cc7314957b8c012c72f05aeeb';
+        fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
+
+function fulfill(bytes32 _requestId, uint256 _volume) public recordChainlinkFulfillment(_requestId) {
+                volume = _volume;
+    }
+
+function withdrawLink() public onlyOwner {
+        LinkTokenInterface link = LinkTokenInterface(chainlinkTokenAddress());
+        require(link.transfer(msg.sender, link.balanceOf(address(this))), 'Unable to transfer');
+    }
+
+
+function requestVolumeData() public returns (bytes32 requestId) {
+        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
+
+        // Set the URL to perform the GET request on
+        req.add('get', 'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=ETH&tsyms=USD');
+
+        // Set the path to find the desired data in the API response, where the response format is:
+        // {"RAW":
+        //   {"ETH":
+        //    {"USD":
+        //     {
+        //      "VOLUME24HOUR": xxx.xxx,
+        //     }
+        //    }
+        //   }
+        //  }
+        // request.add("path", "RAW.ETH.USD.VOLUME24HOUR"); // Chainlink nodes prior to 1.0.0 support this format
+        req.add('path', 'RAW,ETH,USD,VOLUME24HOUR');
+
+
+        // Sends the request
+        return sendChainlinkRequest(req, fee);
+    }
+
+
 
     //deposit tokens and lock'em;
     function deposit(address buyer,uint256 amt)public {
@@ -32,6 +83,7 @@ contract Trustless{
     }
     //seller confirms
     function release(uint256 token)public{
+
         require(!database[token].settled);
         require(msg.sender==database[token].seller,"only seller can release");
         erc20.safeTransfer(database[token].buyer,database[token].amt);
